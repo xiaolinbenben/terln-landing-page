@@ -24,11 +24,6 @@
       box-sizing: border-box;
     }
 
-    html {
-      scroll-behavior: smooth;
-      overscroll-behavior-y: none;
-    }
-
     body {
       margin: 0;
       color: var(--ink);
@@ -39,13 +34,6 @@
       font-family: "Inter", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
       letter-spacing: 0;
       overflow-x: hidden;
-      overscroll-behavior-y: none;
-    }
-
-    html.is-snapping,
-    html.is-snapping body {
-      scroll-behavior: auto;
-      overscroll-behavior-y: none;
     }
 
     body::before {
@@ -131,17 +119,6 @@
       align-items: center;
       overflow: hidden;
       isolation: isolate;
-      opacity: var(--snap-fade, 1);
-      will-change: transform;
-    }
-
-    .screen:not(.hero) {
-      opacity: calc(var(--scroll-fade, 1) * var(--snap-fade, 1));
-      will-change: opacity;
-    }
-
-    .screen.hero {
-      opacity: calc(var(--hero-boundary-fade, 1) * var(--snap-fade, 1));
     }
 
     .screen::after {
@@ -3264,15 +3241,6 @@
     let starHeight = 0;
     let heroProgress = 0;
     let targetHeroProgress = 0;
-    let snapping = false;
-    let lastScrollY = window.scrollY;
-    let scrollFadeTicking = false;
-    let touchStartY = 0;
-    let touchStartX = 0;
-    let touchStartTime = 0;
-    let mobileScrollSnapTimer = 0;
-    let mobileScrollLastY = window.scrollY;
-    let mobileWheelIntentTime = 0;
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -3282,133 +3250,6 @@
       return value < 0.5
         ? 2 * value * value
         : 1 - Math.pow(-2 * value + 2, 2) / 2;
-    }
-
-    function getLeavingScreen(screens, direction) {
-      const currentY = Math.round(window.scrollY);
-      const tolerance = 12;
-
-      if (direction > 0) {
-        return screens
-          .slice()
-          .reverse()
-          .find((section) => Math.round(section.offsetTop) <= currentY + tolerance) || screens[0];
-      }
-
-      return screens.find((section) => Math.round(section.offsetTop) >= currentY - tolerance) || screens[screens.length - 1];
-    }
-
-    function updateSnapFade(leavingScreen, direction, progress = 0) {
-      if (!leavingScreen) return;
-
-      const viewportHeight = window.innerHeight || 1;
-      const fadeStart = viewportHeight / 3;
-      const fadeEnd = viewportHeight / 2;
-      const rect = leavingScreen.getBoundingClientRect();
-      let fade = 1;
-
-      if (direction > 0 && leavingScreen.classList.contains("hero")) {
-        fade = 1 - easeInOut(clamp((progress - 0.12) / 0.38, 0, 1));
-      } else if (direction > 0 && rect.height > viewportHeight * 1.2 && rect.bottom < viewportHeight - fadeStart && rect.bottom > 0) {
-        fade = 1 - clamp((viewportHeight - fadeStart - rect.bottom) / (fadeEnd - fadeStart), 0, 1);
-      } else if (direction > 0 && rect.top < -fadeStart && rect.bottom > 0) {
-        fade = 1 - clamp((-rect.top - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-      } else if (direction < 0 && rect.top > fadeStart && rect.top < viewportHeight) {
-        fade = 1 - clamp((rect.top - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-      }
-
-      leavingScreen.style.setProperty("--snap-fade", fade.toFixed(3));
-    }
-
-    function resetSnapFade() {
-      document.querySelectorAll(".screen").forEach((section) => {
-        section.style.setProperty("--snap-fade", "1");
-      });
-    }
-
-    function smoothSnapTo(element, duration, leavingScreen, direction) {
-      const startY = Math.round(window.scrollY);
-      const targetY = Math.round(element.offsetTop);
-      const distance = targetY - startY;
-      const startTime = performance.now();
-      const useSnapFade = leavingScreen && (window.matchMedia("(max-width: 700px)").matches || leavingScreen.classList.contains("hero"));
-      document.documentElement.classList.add("is-snapping");
-      resetSnapFade();
-
-      function step(now) {
-        const progress = clamp((now - startTime) / duration, 0, 1);
-        const eased = easeInOut(progress);
-        window.scrollTo({ top: Math.round(startY + distance * eased), behavior: "auto" });
-        if (useSnapFade) {
-          updateSnapFade(leavingScreen, direction, progress);
-        }
-
-        if (progress < 1) {
-          requestAnimationFrame(step);
-        } else {
-          window.scrollTo({ top: Math.round(element.offsetTop), behavior: "auto" });
-          resetSnapFade();
-        }
-      }
-
-      requestAnimationFrame(step);
-    }
-
-    function getDirectionalSnapTarget(screens, direction) {
-      const currentY = Math.round(window.scrollY);
-      const tolerance = 12;
-
-      if (direction > 0) {
-        return screens.find((section) => Math.round(section.offsetTop) > currentY + tolerance) || screens[screens.length - 1];
-      }
-
-      return screens
-        .slice()
-        .reverse()
-        .find((section) => Math.round(section.offsetTop) < currentY - tolerance) || screens[0];
-    }
-
-    function updateScrollbarFade() {
-      if (snapping && window.matchMedia("(max-width: 700px)").matches) {
-        scrollFadeTicking = false;
-        return;
-      }
-
-      const currentY = window.scrollY;
-      const direction = currentY >= lastScrollY ? 1 : -1;
-      const viewportHeight = window.innerHeight || 1;
-      const fadeStart = viewportHeight / 3;
-      const fadeEnd = viewportHeight / 2;
-      const isMobileBoundary = window.matchMedia("(max-width: 700px)").matches;
-      const screens = Array.from(document.querySelectorAll(".screen"));
-
-      for (const section of screens) {
-        let fade = 1;
-        let heroBoundaryFade = 1;
-        const rect = section.getBoundingClientRect();
-
-        if (direction > 0 && rect.top < -fadeStart && rect.bottom > 0) {
-          fade = 1 - clamp((-rect.top - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-        } else if (direction < 0 && rect.top > fadeStart && rect.top < viewportHeight) {
-          fade = 1 - clamp((rect.top - fadeStart) / (fadeEnd - fadeStart), 0, 1);
-        }
-
-        if (isMobileBoundary && section.classList.contains("hero")) {
-          const heroFadeStart = viewportHeight * 0.72;
-          const heroFadeEnd = viewportHeight * 0.42;
-          if (direction > 0 && rect.bottom < heroFadeStart && rect.bottom > 0) {
-            heroBoundaryFade = 1 - clamp((heroFadeStart - rect.bottom) / (heroFadeStart - heroFadeEnd), 0, 1);
-          } else if (direction < 0 && rect.bottom < heroFadeStart && rect.bottom > 0) {
-            heroBoundaryFade = 1 - clamp((heroFadeStart - rect.bottom) / (heroFadeStart - heroFadeEnd), 0, 1);
-          }
-        }
-
-        section.style.setProperty("--scroll-fade", fade.toFixed(3));
-        section.style.setProperty("--hero-boundary-fade", heroBoundaryFade.toFixed(3));
-      }
-
-      lastScrollY = currentY;
-      scrollFadeTicking = false;
     }
 
     function resize() {
@@ -3587,108 +3428,6 @@
 
     document.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
 
-    function snapByDirection(direction) {
-      const snapDuration = 1180;
-      const heroEnd = hero.offsetTop + hero.offsetHeight - window.innerHeight;
-      const inHeroAnimation = window.scrollY < heroEnd - 8 && direction > 0;
-      const slogansVisible = heroInner.classList.contains("show-slogans") || heroProgress > 0.66;
-      if (inHeroAnimation && !slogansVisible) return false;
-
-      const screens = Array.from(document.querySelectorAll(".screen"));
-      const targetScreen = getDirectionalSnapTarget(screens, direction);
-      if (!targetScreen || Math.abs(targetScreen.offsetTop - window.scrollY) < 2) return false;
-
-      snapping = true;
-      const leavingScreen = getLeavingScreen(screens, direction);
-      smoothSnapTo(targetScreen, snapDuration, leavingScreen, direction);
-      window.setTimeout(() => {
-        snapping = false;
-        document.documentElement.classList.remove("is-snapping");
-        resetSnapFade();
-        updateScrollbarFade();
-      }, snapDuration + 140);
-      return true;
-    }
-
-    function scheduleMobileScrollSnap() {
-      if (!window.matchMedia("(max-width: 700px)").matches || snapping) return;
-      if (Date.now() - mobileWheelIntentTime > 220) {
-        mobileScrollLastY = window.scrollY;
-        return;
-      }
-
-      const currentY = window.scrollY;
-      const delta = currentY - mobileScrollLastY;
-      mobileScrollLastY = currentY;
-      if (Math.abs(delta) < 1) return;
-
-      window.clearTimeout(mobileScrollSnapTimer);
-      mobileScrollSnapTimer = window.setTimeout(() => {
-        if (snapping || !window.matchMedia("(max-width: 700px)").matches) return;
-        const direction = delta > 0 ? 1 : -1;
-        const heroEnd = hero.offsetTop + hero.offsetHeight - window.innerHeight;
-        const inHeroAnimation = window.scrollY < heroEnd - 8 && direction > 0;
-        const slogansVisible = heroInner.classList.contains("show-slogans") || heroProgress > 0.66;
-        if (inHeroAnimation && !slogansVisible) return;
-        snapByDirection(direction);
-      }, 90);
-    }
-
-    window.addEventListener("wheel", (event) => {
-      const isMobileWheel = window.matchMedia("(max-width: 700px)").matches;
-      const wheelThreshold = isMobileWheel ? 0 : 54;
-      const direction = event.deltaY > 0 ? 1 : -1;
-      if (isMobileWheel) {
-        const heroEnd = hero.offsetTop + hero.offsetHeight - window.innerHeight;
-        const inHeroAnimation = window.scrollY < heroEnd - 8 && direction > 0;
-        const slogansVisible = heroInner.classList.contains("show-slogans") || heroProgress > 0.66;
-        if (inHeroAnimation && !slogansVisible) {
-          mobileWheelIntentTime = 0;
-          mobileScrollLastY = window.scrollY;
-          window.clearTimeout(mobileScrollSnapTimer);
-          return;
-        }
-
-        mobileWheelIntentTime = Date.now();
-        mobileScrollLastY = window.scrollY;
-      }
-      if (snapping) {
-        event.preventDefault();
-        return;
-      }
-      if (Math.abs(event.deltaY) <= wheelThreshold) return;
-
-      if (snapByDirection(direction)) {
-        event.preventDefault();
-      }
-    }, { passive: false });
-
-    window.addEventListener("touchstart", (event) => {
-      if (!window.matchMedia("(max-width: 700px)").matches || event.touches.length !== 1) return;
-      touchStartY = event.touches[0].clientY;
-      touchStartX = event.touches[0].clientX;
-      touchStartTime = Date.now();
-    }, { passive: true });
-
-    window.addEventListener("touchend", (event) => {
-      if (!window.matchMedia("(max-width: 700px)").matches || !touchStartTime || snapping) return;
-      const touch = event.changedTouches[0];
-      if (!touch) return;
-
-      const deltaY = touchStartY - touch.clientY;
-      const deltaX = Math.abs(touchStartX - touch.clientX);
-      const elapsed = Date.now() - touchStartTime;
-      const swipeThreshold = elapsed < 360 ? 34 : 58;
-
-      touchStartTime = 0;
-      if (Math.abs(deltaY) < swipeThreshold || deltaX > Math.abs(deltaY) * 0.85) return;
-
-      const direction = deltaY > 0 ? 1 : -1;
-      if (snapByDirection(direction)) {
-        event.preventDefault();
-      }
-    }, { passive: false });
-
     const openQr = document.getElementById("openQr");
     const qrModal = document.getElementById("qrModal");
 
@@ -3713,17 +3452,8 @@
       }
     });
 
-    window.addEventListener("scroll", () => {
-      scheduleMobileScrollSnap();
-      if (!scrollFadeTicking) {
-        scrollFadeTicking = true;
-        requestAnimationFrame(updateScrollbarFade);
-      }
-    }, { passive: true });
-
     window.addEventListener("resize", resize);
     resize();
-    updateScrollbarFade();
     draw();
   </script>
 </body>
