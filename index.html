@@ -238,7 +238,6 @@
       width: 100%;
       transform: translateY(var(--title-lift)) scale(calc(1 - var(--hero-progress) * 0.08));
       opacity: var(--title-opacity);
-      transition: transform 0.08s linear, opacity 0.12s linear;
       will-change: transform, opacity;
     }
 
@@ -3241,6 +3240,7 @@
     let starHeight = 0;
     let heroProgress = 0;
     let targetHeroProgress = 0;
+    let heroProgressFrame = 0;
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
@@ -3295,8 +3295,7 @@
 
     function updateHeroProgress() {
       const scrollable = Math.max(1, hero.offsetHeight - window.innerHeight);
-      const rect = hero.getBoundingClientRect();
-      targetHeroProgress = clamp(-rect.top / scrollable, 0, 1);
+      targetHeroProgress = clamp((window.scrollY - hero.offsetTop) / scrollable, 0, 1);
       heroProgress += (targetHeroProgress - heroProgress) * 0.12;
       if (Math.abs(targetHeroProgress - heroProgress) < 0.001) {
         heroProgress = targetHeroProgress;
@@ -3304,7 +3303,19 @@
       heroInner.style.setProperty("--hero-progress", heroProgress.toFixed(3));
       const titleOpacity = clamp(1 - (heroProgress - 0.28) / 0.35, 0, 1);
       heroInner.style.setProperty("--title-opacity", titleOpacity.toFixed(3));
-      heroInner.classList.toggle("show-slogans", heroProgress > 0.66);
+      heroInner.classList.toggle("show-slogans", targetHeroProgress > 0.66);
+
+      if (Math.abs(targetHeroProgress - heroProgress) >= 0.001) {
+        scheduleHeroProgress();
+      }
+    }
+
+    function scheduleHeroProgress() {
+      if (heroProgressFrame) return;
+      heroProgressFrame = requestAnimationFrame(() => {
+        heroProgressFrame = 0;
+        updateHeroProgress();
+      });
     }
 
     function drawHeroStars() {
@@ -3354,7 +3365,6 @@
 
     function draw() {
       ctx.clearRect(0, 0, width, height);
-      updateHeroProgress();
       drawHeroStars();
       for (const point of points) {
         point.x += point.vx;
@@ -3452,8 +3462,13 @@
       }
     });
 
-    window.addEventListener("resize", resize);
+    window.addEventListener("scroll", scheduleHeroProgress, { passive: true });
+    window.addEventListener("resize", () => {
+      resize();
+      scheduleHeroProgress();
+    });
     resize();
+    updateHeroProgress();
     draw();
   </script>
 </body>
